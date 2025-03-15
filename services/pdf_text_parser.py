@@ -96,8 +96,9 @@ def get_pdf_text(pdf_path):
 
     # Создаём словарь для извлечения текста из каждого изображения
     text_per_page = {}
+    pages = enumerate(extract_pages(pdf_path))
     # Извлекаем страницы из PDF
-    for pagenum, page in enumerate(extract_pages(pdf_path)):
+    for pagenum, page in pages:
 
         # Инициализируем переменные, необходимые для извлечения текста со страницы
         pageObj = pdfReaded.pages[pagenum]
@@ -134,17 +135,19 @@ def get_pdf_text(pdf_path):
                 # Проверяем, находится ли текст в таблице
                 if table_extraction_flag == False:
                     # Используем функцию извлечения текста и формата для каждого текстового элемента
-                    (line_text, format_per_line) = text_extraction(element)
+                    #(line_text, format_per_line) = text_extraction(element)
+                    line_text = element.get_text()
                     # Добавляем текст каждой строки к тексту страницы
                     page_text.append(line_text)
                     # Добавляем формат каждой строки, содержащей текст
-                    line_format.append(format_per_line)
+                    #line_format.append(format_per_line)
                     page_content.append(line_text)
                 else:
                     # Пропускаем текст, находящийся в таблице
                     pass
 
-# TODO: Fix an images scanner
+
+        # TODO: Fix an images scanner
             # Проверяем элементы на наличие изображений
             if isinstance(element, LTFigure):
                 continue
@@ -195,6 +198,8 @@ def get_pdf_text(pdf_path):
         # Добавляем список списков как значение ключа страницы
         text_per_page[dctkey] = [page_text, line_format, text_from_images, text_from_tables, page_content]
 
+
+
     # Закрываем объект файла pdf
     pdfFileObj.close()
 
@@ -206,8 +211,19 @@ def get_pdf_text(pdf_path):
         pass
 
     # Удаляем содержимое страницы
-    result = ''.join(text_per_page['Page_1'][4])
-    print(result)
+    with open('text.txt', 'w', encoding="utf-8") as text_file:
+        result = ""
+        for item in text_per_page.values():
+            print(item)
+            result += ''.join(item[0]) + '\n'
+            #result += ''.join(item)
+        print(result)
+        text_file.write(result)
+
+        #''.join(text_per_page['Page_0'][4])
+
+        text_file.close()
+    print("success")
 
 
 
