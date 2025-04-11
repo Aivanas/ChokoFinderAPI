@@ -55,13 +55,48 @@ async def ask_question(question: str):
 
     if "GIGACHAT_CREDENTIALS" not in os.environ:
         os.environ["GIGACHAT_CREDENTIALS"] = getpass.getpass("Введите ключ авторизации GigaChat API: ")
+
     model_name = "jinaai/jina-embeddings-v3"
     embeddings = HuggingFaceEmbeddings(model_name=model_name, model_kwargs={'trust_remote_code': True})
+
     db = Chroma(
         collection_name="RAG",
         embedding_function=embeddings,
         client_settings=Settings(anonymized_telemetry=False),
         persist_directory=db_path
     )
-    qa_chain = RetrievalQA.from_chain_type(llm, retriever=db.as_retriever())
-    return qa_chain({"query": question})["result"]
+
+    # Настройка retriever с указанием параметров
+    retriever = db.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}  # Получаем 5 наиболее релевантных документов
+    )
+
+    # Создаем промпт, который явно инструктирует модель использовать контекст
+    from langchain.prompts import PromptTemplate
+    prompt_template = """Используй только следующий контекст для ответа на вопрос. Если ты не можешь найти ответ в контексте, прямо скажи "Я не могу найти ответ в предоставленных документах".
+
+Контекст:
+{context}
+
+Вопрос: {question}
+Ответ: """
+    PROMPT = PromptTemplate(
+        template=prompt_template, input_variables=["context", "question"]
+    )
+
+    # Создаем цепочку с указанием типа и промпта
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",  # Явно указываем тип цепочки
+        retriever=retriever,
+        return_source_documents=True,  # Возвращаем исходные документы для проверки
+        chain_type_kwargs={"prompt": PROMPT}
+    )
+
+    result = qa_chain({"query": question})
+
+    # Можно также добавить логирование для отладки
+    print(f"Использованные документы: {result['source_documents']}")
+
+    return result["result"]
