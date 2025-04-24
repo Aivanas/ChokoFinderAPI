@@ -1,17 +1,29 @@
-import os.path
-from http.client import HTTPException
-
+import os
+import logging
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 
-from services import FilesHandler
+from api import api_router
+from config import settings
+from db.base import Base
+from db.session import engine, SessionLocal
+from db.init_db import init_db
 
-from fastapi import FastAPI, BackgroundTasks, UploadFile, HTTPException, WebSocketException
-import services
-from models.QuestionData import QuestionData
-from services.FilesHandler import process_files_to_vector_db, ask_question
-import aiofiles
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI()
+# Создание приложения FastAPI
+app = FastAPI(
+    title="RAG Agent API",
+    description="API для работы с RAG агентом",
+    version="0.1.0",
+    debug=settings.DEBUG
+)
+
+# Настройка CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,29 +32,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Инициализация базы данных
+def setup_db():
+    try:
+        # Создание таблиц
+        Base.metadata.create_all(bind=engine)
+        logger.info("Таблицы в базе данных успешно созданы")
+
+        # Инициализация начальных данных
+        db = SessionLocal()
+        try:
+            init_db(db)
+        finally:
+            db.close()
+
+    except OperationalError as e:
+        logger.error(f"Не удалось инициализировать базу данных: {e}")
+        if settings.DEBUG:
+            logger.warning("Режим отладки: продолжаем работу")
+        else:
+            logger.error("Критическая ошибка: приложение не может запуститься без базы данных")
+            import sys
+            sys.exit(1)
+
+
+# Инициализация БД при запуске
+setup_db()
+
+# Регистрация маршрутов
+app.include_router(api_router)
+
+# Создание директории для документов, если не существует
+os.makedirs(settings.DOCS_DIRECTORY, exist_ok=True)
+
+
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Welcome to RAG Agent API"}
 
 
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
-@app.get("/updateBase", status_code=200)
-async def updateVectorBase(background_tasks: BackgroundTasks):
-    background_tasks.add_task(process_files_to_vector_db)
-    return {"message": "Обработка запущена"}
-
-@app.post("/uploadfile/")
-async def upload_file(files: list[UploadFile]):
-    files_exist_list = []
-    for file in files:
-        async with aiofiles.open(f'Docs\\{file.filename}', "wb") as out_file:
-            content = await file.read()
-            await out_file.write(content)
-    return {"filename": [file.filename for file in files], "Result": "OK"}
+# Проверка статуса подключения к базе данных
+@app.get("/health")
+async def health_check():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": str(e)}
 
 
-@app.post("/getAnswer/")
-async def getAnswer(request: QuestionData):
-    return {"question": await ask_question(request.question)}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

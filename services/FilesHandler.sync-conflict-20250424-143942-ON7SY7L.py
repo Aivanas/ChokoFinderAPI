@@ -12,7 +12,7 @@ from langchain.chains import RetrievalQA
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_gigachat.chat_models import GigaChat
-from config import *
+from settings import *
 
 db_path = "DATABASE\\"
 
@@ -39,7 +39,7 @@ async def process_files_to_vector_db():
     SentenceTransformer(model_name, trust_remote_code=True)
     embeddings = HuggingFaceEmbeddings(model_name=model_name, model_kwargs={'trust_remote_code': True})
 
-    db = Chroma.from_documents(
+    Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
         collection_name="RAG",
@@ -74,7 +74,8 @@ async def ask_question(question: str):
 
     # Создаем промпт, который явно инструктирует модель использовать контекст
     from langchain.prompts import PromptTemplate
-    prompt_template = """Используй только следующий контекст для ответа на вопрос. Если ты не можешь найти ответ в контексте, прямо скажи "Я не могу найти ответ в предоставленных документах".
+    prompt_template = """Используй только следующий контекст для ответа на вопрос. Если ты не можешь найти ответ в 
+    контексте, прямо скажи "Я не могу найти ответ в предоставленных документах".
 
 Контекст:
 {context}
@@ -84,19 +85,13 @@ async def ask_question(question: str):
     PROMPT = PromptTemplate(
         template=prompt_template, input_variables=["context", "question"]
     )
-
-    # Создаем цепочку с указанием типа и промпта
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
-        chain_type="stuff",  # Явно указываем тип цепочки
+        chain_type="stuff",
         retriever=retriever,
-        return_source_documents=True,  # Возвращаем исходные документы для проверки
+        return_source_documents=True,
         chain_type_kwargs={"prompt": PROMPT}
     )
-
     result = qa_chain({"query": question})
-
-    # Можно также добавить логирование для отладки
     print(f"Использованные документы: {result['source_documents']}")
-
     return result["result"]
