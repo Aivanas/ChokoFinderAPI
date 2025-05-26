@@ -7,7 +7,6 @@ from config import settings
 
 def verify_password(plain_password, hashed_password):
     """Проверка пароля"""
-    # bcrypt требует байтовые строки для сравнения
     if isinstance(plain_password, str):
         plain_password = plain_password.encode('utf-8')
     if isinstance(hashed_password, str):
@@ -18,15 +17,10 @@ def verify_password(plain_password, hashed_password):
 
 def get_password_hash(password):
     """Хеширование пароля"""
-    # Преобразуем пароль в байты, если он передан как строка
     if isinstance(password, str):
         password = password.encode('utf-8')
-
-    # Генерируем соль и хешируем пароль
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password, salt)
-
-    # Возвращаем хеш в виде строки
     return hashed.decode('utf-8')
 
 

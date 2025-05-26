@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from api import api_router
 from config import settings
+from core.metrics import MetricsMiddleware
 from db.base import Base
 from db.session import engine, SessionLocal
 from db.init_db import init_db
@@ -57,22 +58,18 @@ def setup_db():
             sys.exit(1)
 
 
-# Инициализация БД при запуске
+
 setup_db()
 
-# Регистрация маршрутов
 app.include_router(api_router)
+app.add_middleware(MetricsMiddleware)
 
-# Создание директории для документов, если не существует
 os.makedirs(settings.DOCS_DIRECTORY, exist_ok=True)
-
 
 @app.get("/")
 async def root():
     return {"message": "Welcome to RAG Agent API"}
 
-
-# Проверка статуса подключения к базе данных
 @app.get("/health")
 async def health_check():
     try:
@@ -85,4 +82,6 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    from prometheus_client import start_http_server
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    start_http_server(8010)

@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from config import settings
+from core.metrics import LOGIN_ATTEMPTS, REGISTRATIONS_COUNT
 from core.security import create_access_token, verify_password, get_password_hash
 from db.session import get_db
 from models.user import User
@@ -21,6 +22,7 @@ async def login_for_access_token(
     """Получение JWT токена"""
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
+        LOGIN_ATTEMPTS.labels(success='false').inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -31,6 +33,7 @@ async def login_for_access_token(
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
+    LOGIN_ATTEMPTS.labels(success='true').inc()
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -50,11 +53,13 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        is_admin=False,  # Новые пользователи не являются администраторами по умолчанию
+        is_admin=False,
         is_active=True
     )
-
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    REGISTRATIONS_COUNT.inc()
     return db_user
+
+

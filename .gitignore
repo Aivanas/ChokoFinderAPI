@@ -2,5 +2,6 @@
 .venv
 .ipynb_checkpoints
 chroma
-Docs
+Docs/
 DATABASE
+.idea

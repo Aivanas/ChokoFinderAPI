@@ -30,6 +30,27 @@ async def read_users(
     return users
 
 
+@router.get("/{user_id}", response_model=UserInDB)
+async def get_user_by_id(
+    user_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Получение информации о пользователе по ID"""
+    # Обычные пользователи могут получать информацию только о себе
+    if not current_user.is_admin and current_user.id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав для получения информации о другом пользователе"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
+    return user
+
+
 @router.put("/{user_id}", response_model=UserInDB)
 async def update_user(
         user_id: int,
@@ -86,3 +107,20 @@ async def reset_admin_password(
     db.refresh(admin)
 
     return admin
+
+@router.put("/{user_id}/change-password", response_model=UserInDB)
+async def change_user_password(
+    user_id: int,
+    password: str,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Изменение пароля пользователя (только для администраторов)"""
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db_user.hashed_password = get_password_hash(password)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
